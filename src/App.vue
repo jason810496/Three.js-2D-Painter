@@ -14,30 +14,28 @@ let pointer, raycaster, isShiftDown = false;
 let rollOverMesh, rollOverMaterial;
 let cubeGeo, cubeMaterial;
 
-const objects = [];
+let _meshObjectX = 50;
+let _meshObjectY = 50;
+let _meshObjectZ = 50;
 
-let userX;
-let userZ;
+const objects = [];
 
 init();
 render();
 
-
-
 function init() {
-  userX = 0;
-  userZ = 0;
 
-  camera = new THREE.PerspectiveCamera( 30, window.innerWidth / window.innerHeight, 0.1, 10000 );
-  camera.position.set( 0 , 4000 ,0  );
-  camera.lookAt( 0 , 0, 0 );
+  // camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 1, 10000 );
+  camera = new THREE.OrthographicCamera( window.innerWidth / - 2, window.innerWidth / 2, window.innerHeight / 2, window.innerHeight / - 2, 1, 10000 );
+  camera.position.set( 0, 800, 0 );
+  camera.lookAt( 0, 0, 0 );
 
   scene = new THREE.Scene();
   scene.background = new THREE.Color( 0xf0f0f0 );
 
   // roll-over helpers
 
-  const rollOverGeo = new THREE.BoxGeometry( 50, 50, 50 );
+  const rollOverGeo = new THREE.BoxGeometry( _meshObjectX, _meshObjectY, _meshObjectZ );
   rollOverMaterial = new THREE.MeshBasicMaterial( { color: 0xff0000, opacity: 0.5, transparent: true } );
   rollOverMesh = new THREE.Mesh( rollOverGeo, rollOverMaterial );
   scene.add( rollOverMesh );
@@ -46,7 +44,7 @@ function init() {
 
   const map = new THREE.TextureLoader().load( 'textures/square-outline-textured.png' );
   map.colorSpace = THREE.SRGBColorSpace;
-  cubeGeo = new THREE.BoxGeometry( 50, 50, 50 );
+  cubeGeo = new THREE.BoxGeometry( _meshObjectX, _meshObjectY, _meshObjectZ );
   cubeMaterial = new THREE.MeshLambertMaterial( { color: 0xfeb74c, map: map } );
 
   // grid
@@ -111,8 +109,6 @@ function onPointerMove( event ) {
 
   const intersects = raycaster.intersectObjects( objects, false );
 
-  console.log("intersects" , intersects);
-
   if ( intersects.length > 0 ) {
 
     const intersect = intersects[ 0 ];
@@ -130,7 +126,12 @@ function onPointerDown( event ) {
 
   pointer.set( ( event.clientX / window.innerWidth ) * 2 - 1, - ( event.clientY / window.innerHeight ) * 2 + 1 );
 
+  let originalCameraPosition = camera.position.clone();
+  camera.position.set(  pointer.x , 800, pointer.z );
+
   raycaster.setFromCamera( pointer, camera );
+
+  camera.position.set( originalCameraPosition.x, originalCameraPosition.y, originalCameraPosition.z );
 
   const intersects = raycaster.intersectObjects( objects, false );
 
