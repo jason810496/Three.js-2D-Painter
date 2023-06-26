@@ -45,7 +45,7 @@ function init() {
   const gridHelper = new THREE.GridHelper( 1000, 20 );
   scene.add( gridHelper );
 
-  //
+  // raycaster
 
   raycaster = new THREE.Raycaster();
   pointer = new THREE.Vector2();

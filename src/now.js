@@ -6,10 +6,12 @@ let panX = 0;
 let panY = 0;
 let isPanning = false;
 let grid = [];
-let tool = 'brush';
+let tool = 'brush'; // brush, eraser, line, rect
 let startX, startY;
 let dragging = false;
 
+
+let history = [];
 
 
 function setup() {
