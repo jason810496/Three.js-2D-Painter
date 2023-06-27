@@ -236,6 +236,20 @@ function onPointerMove(event) {
 
         console.log("MeshList: ", MeshList);
 
+      } else if( tool === 'rect' ){
+        let x1 = previousVoxel.position.x;
+        let z1 = previousVoxel.position.z;
+
+        const currentPosition = new THREE.Mesh(cubeGeo, cubeMaterial);
+        currentPosition.position.copy(intersect.point).add(intersect.face.normal);
+        currentPosition.position.divideScalar(50).floor().multiplyScalar(50).addScalar(25);
+
+        let x2 = currentPosition.position.x;
+        let z2 = currentPosition.position.z;
+
+        DrawMeshRect(x1, z1, x2, z2);
+
+        console.log("MeshList: ", MeshList);
       }
     }
   }
@@ -283,6 +297,35 @@ function DrawMeshLine(x1, z1, x2, z2) {
       z1 += sy;
     }
   }
+}
+
+
+function DrawMeshRect(x1, z1, x2, z2) {
+
+  // clear previouse line ( MeshList )
+  while (MeshList.length > 0) {
+    scene.remove(MeshList.pop());
+  }
+
+  console.log(`x1: ${x1}, z1: ${z1}, x2: ${x2}, z2: ${z2}`);
+
+  let sx = (x1 < x2) ? _meshObjectX : -_meshObjectX;
+  let sz = (z1 < z2) ? _meshObjectZ : -_meshObjectZ;
+  let dx = x2-x1>=0 ? x2-x1:x1-x2;
+  let dz = z2-z1>=0 ? z2-z1:z1-z2;
+  let cntX = dx/_meshObjectX;
+  let cntZ = dz/_meshObjectZ;
+  
+  for(let i=0;i<cntX;i++){
+    for(let j=0;j<cntZ;j++){
+      const rollOverGeo = new THREE.BoxGeometry(_meshObjectX, _meshObjectY, _meshObjectZ);
+      const rollOverMesh = new THREE.Mesh(rollOverGeo, rollOverMaterial);
+      rollOverMesh.position.copy(new THREE.Vector3(x1+i*sx, 0 , z1+j*sz));
+      scene.add(rollOverMesh);
+      MeshList.push(rollOverMesh);
+    }
+  }
+  
 }
 
 function onPointerDown(event) {
@@ -343,6 +386,41 @@ function onPointerDown(event) {
 
 function onPointerUp() {
   isPressed = false;
+
+  if( tool === 'line' ) {
+    // add real line 
+    previousVoxel = null;
+
+    // clear previouse line ( MeshList )
+    while (MeshList.length > 0) {
+      const rollOverMesh = MeshList.pop();
+      
+      const voxel = new THREE.Mesh(cubeGeo, cubeMaterial);
+      voxel.position.copy(rollOverMesh.position);
+      voxel.position.divideScalar(50).floor().multiplyScalar(50).addScalar(25);
+      scene.add(voxel);
+      objects.push(voxel);
+
+      scene.remove(rollOverMesh);
+    }
+  }
+  else if( tool === 'rect' ) {
+    // add real line 
+    previousVoxel = null;
+
+    // clear previouse line ( MeshList )
+    while (MeshList.length > 0) {
+      const rollOverMesh = MeshList.pop();
+      
+      const voxel = new THREE.Mesh(cubeGeo, cubeMaterial);
+      voxel.position.copy(rollOverMesh.position);
+      voxel.position.divideScalar(50).floor().multiplyScalar(50).addScalar(25);
+      scene.add(voxel);
+      objects.push(voxel);
+
+      scene.remove(rollOverMesh);
+    }
+  }
 }
 
 function draw() {
