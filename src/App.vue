@@ -27,31 +27,31 @@ let plane;
 let pointer;
 let raycaster;
 
+let rollOverGeo;
 let rollOverMesh;
 let rollOverMaterial;
 
 let cubeGeo;
 let cubeMaterial;
 
-let objects = [];
 
-let _meshObjectX = 50;
-let _meshObjectY = 50;
-let _meshObjectZ = 50;
+
+let _objectX = 50;
+let _objectY = 50;
+let _objectZ = 50;
 
 let MeshList = [];
+let objects = [];
 
 // ====== three.js variables END ======
 
-let gridSize = 64;
-let cellSize = 10;
-let brushSize = 1;
+
+
 let zoomLevel = 1;
 let panX = 0;
 let panY = 0;
 let isPanning = false;
-let grid = [];
-let tool = 'brush'; // brush, eraser, line, rect
+
 let startX, startY;
 let dragging = false;
 
@@ -59,6 +59,8 @@ let dragging = false;
 let history = [];
 let isPressed = false;
 let previousVoxel = null;
+let brushSize = 1;
+let tool = 'brush'; // brush, eraser, line, rect
 
 init();
 render();
@@ -73,7 +75,7 @@ function createButton(text, position, callback) {
   document.body.appendChild(button);
 }
 
-function init() {
+function initSideBar() {
   // ====== sidebar btns init START ======
 
   createButton('橡皮擦', { x: 54, y: window.innerHeight - 500 }, function () {
@@ -89,7 +91,7 @@ function init() {
     tool = 'rect';
   });
   createButton('清空', { x: 54, y: window.innerHeight - 350 }, function () {
-    clearGrid();
+    clearAllRealObjects();
   });
   createButton('Small Brush', { x: 54, y: window.innerHeight - 300 }, function () {
     brushSize = 1;
@@ -107,9 +109,9 @@ function init() {
 
   });
   // ====== sidebar btns init END ======
+}
 
-
-
+function initThreeJs() {
   // ====== three.js init ======
   // camera
   camera = new THREE.OrthographicCamera(window.innerWidth / - 2, window.innerWidth / 2, window.innerHeight / 2, window.innerHeight / - 2, 1, 10000);
@@ -120,17 +122,16 @@ function init() {
   scene.background = new THREE.Color(0xf0f0f0);
 
   // roll-over helpers
-  const rollOverGeo = new THREE.BoxGeometry(_meshObjectX, _meshObjectY, _meshObjectZ);
+  rollOverGeo = new THREE.BoxGeometry(_objectX, _objectY, _objectZ);
   rollOverMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000, opacity: 0.5, transparent: true });
   rollOverMesh = new THREE.Mesh(rollOverGeo, rollOverMaterial);
-  scene.add(rollOverMesh);
 
   // cubes
 
   const map = new THREE.TextureLoader().load('textures/square-outline-textured.png');
   map.colorSpace = THREE.SRGBColorSpace;
-  cubeGeo = new THREE.BoxGeometry(_meshObjectX, _meshObjectY, _meshObjectZ);
-  cubeMaterial = new THREE.MeshLambertMaterial({ color: 0xfeb74c, map: map });
+  cubeGeo = new THREE.BoxGeometry(_objectX, _objectY, _objectZ);
+  cubeMaterial = new THREE.MeshLambertMaterial({ color: 0xfeb74c , opacity: 0.1 , map: map });
 
   // grid
 
@@ -166,7 +167,14 @@ function init() {
   document.body.appendChild(renderer.domElement);
 
   // ====== three.js init END ======
+}
 
+function init() {
+
+
+  initSideBar();
+
+  initThreeJs();
 
   // ====== three.js event listeners START ======
 
@@ -192,6 +200,17 @@ function onWindowResize() {
 
 }
 
+function getCurrentPointerCoordinate() { // retrun vector3
+  pointer.set((event.clientX / window.innerWidth) * 2 - 1, - (event.clientY / window.innerHeight) * 2 + 1);
+  raycaster.setFromCamera(pointer, camera);
+  const intersects = raycaster.intersectObjects(objects);
+  if (intersects.length > 0) {
+    const intersect = intersects[0];
+    return intersect.point;
+  }
+  return null;
+}
+
 function onPointerMove(event) {
 
   pointer.set((event.clientX / window.innerWidth) * 2 - 1, - (event.clientY / window.innerHeight) * 2 + 1);
@@ -204,22 +223,29 @@ function onPointerMove(event) {
 
     const intersect = intersects[0];
 
-    rollOverMesh.position.copy(intersect.point).add(intersect.face.normal);
-    rollOverMesh.position.divideScalar(50).floor().multiplyScalar(50).addScalar(25);
+    const curVec = new THREE.Vector3();
+    curVec.copy(intersect.point).add(intersect.face.normal);
+    curVec.divideScalar(50).floor().multiplyScalar(50).addScalar(25);
+    DrawMeshStroke(curVec.x, curVec.z);
+
 
 
     if (isPressed) {
       if (tool === 'eraser') {
-        if (intersect.object !== plane) {
-          scene.remove(intersect.object);
-          objects.splice(objects.indexOf(intersect.object), 1);
+        // remove voxel
+        for(let i=0;i<MeshList.length;i++){
+          for( let j=0;j<objects.length;j++){
+            if( objects[j].position.x === MeshList[i].position.x && objects[j].position.z === MeshList[i].position.z ){
+              scene.remove(objects[j]);
+              objects.splice(j, 1);
+              break;
+            }
+          }
         }
+
       } else if (tool === 'brush') {
-        const voxel = new THREE.Mesh(cubeGeo, cubeMaterial);
-        voxel.position.copy(intersect.point).add(intersect.face.normal);
-        voxel.position.divideScalar(50).floor().multiplyScalar(50).addScalar(25);
-        scene.add(voxel);
-        objects.push(voxel);
+        // console.log("brush curVec: ", curVec);
+        DrawRealStroke(curVec.x, curVec.z);
       } else if (tool === 'line') {
 
         let x1 = previousVoxel.position.x;
@@ -236,7 +262,7 @@ function onPointerMove(event) {
 
         console.log("MeshList: ", MeshList);
 
-      } else if( tool === 'rect' ){
+      } else if (tool === 'rect') {
         let x1 = previousVoxel.position.x;
         let z1 = previousVoxel.position.z;
 
@@ -258,32 +284,88 @@ function onPointerMove(event) {
 
 }
 
-function DrawMeshLine(x1, z1, x2, z2) {
-
-  // clear previouse line ( MeshList )
+function DrawMeshStroke(x, z) {
+  // clear Mesh List 
   while (MeshList.length > 0) {
     scene.remove(MeshList.pop());
   }
 
+  DrawMeshStrokeWithoutClear(x, z);
+}
+
+function DrawMeshStrokeWithoutClear(x, z) {
+  for (let i = 0; i < brushSize; i++) {
+    for (let j = 0; j < brushSize; j++) {
+      DrawMeshPixel(x + i*_objectX, z+j*_objectZ);
+    }
+  }
+}
+
+function DrawMeshPixel(x, z) {
+  // check if already exist
+  for (let i = 0; i < MeshList.length; i++) {
+    if (MeshList[i].position.x === x && MeshList[i].position.z === z) {
+      return;
+    }
+  }
+
+
+  const rollOverMesh = new THREE.Mesh(rollOverGeo, rollOverMaterial);
+  rollOverMesh.position.copy(new THREE.Vector3(x, 0, z));
+  scene.add(rollOverMesh);
+  MeshList.push(rollOverMesh);
+}
+
+function DrawRealStroke(x, z) {
+  // clear Mesh List 
+  // while (MeshList.length > 0) {
+  //   scene.remove(MeshList.pop());
+  // }
+
+  for (let i = 0; i < brushSize; i++) {
+    for (let j = 0; j < brushSize; j++) {
+      DrawRealPixel(x + i * _objectX, z + j * _objectZ);
+    }
+  }
+}
+
+function DrawRealPixel(x, z) {
+  // check if already exist
+  for (let i = 0; i < objects.length; i++) {
+    if (objects[i].position.x === x && objects[i].position.z === z) {
+      return;
+    }
+  }
+
+
+  const voxel = new THREE.Mesh(cubeGeo, cubeMaterial);
+  voxel.position.copy(new THREE.Vector3(x , 0, z));
+  scene.add(voxel);
+  objects.push(voxel);
+}
+
+
+
+function DrawMeshLine(x1, z1, x2, z2) {
+
+  // clear previouse line ( MeshList )
+  while (MeshList.length > 0) {
+    const rollOverMesh = MeshList.pop();
+    scene.remove(rollOverMesh);
+  }
+
   console.log(`x1: ${x1}, z1: ${z1}, x2: ${x2}, z2: ${z2}`);
 
-  let dx = x2-x1>=0 ? x2-x1:x1-x2;
-  let dy = z2-z1>=0 ? z2-z1:z1-z2;
-  let sx = (x1 < x2) ? _meshObjectX : -_meshObjectX;
-  let sy = (z1 < z2) ? _meshObjectZ : -_meshObjectZ;
+  let dx = x2 - x1 >= 0 ? x2 - x1 : x1 - x2;
+  let dy = z2 - z1 >= 0 ? z2 - z1 : z1 - z2;
+  let sx = (x1 < x2) ? _objectX : -_objectX;
+  let sy = (z1 < z2) ? _objectZ : -_objectZ;
   let err = dx - dy;
 
   while (x1 != x2 || z1 != z2) {
     console.log(`x1: ${x1}, z1: ${z1}`);
 
-    // const curMesh = new THREE.Mesh(cubeGeo, cubeMaterial);
-    // curMesh.position.copy(new THREE.Vector3(x1, 0 , z1));
-
-    const rollOverGeo = new THREE.BoxGeometry(_meshObjectX, _meshObjectY, _meshObjectZ);
-    const rollOverMesh = new THREE.Mesh(rollOverGeo, rollOverMaterial);
-    rollOverMesh.position.copy(new THREE.Vector3(x1, 0 , z1));
-    scene.add(rollOverMesh);
-    MeshList.push(rollOverMesh);
+    DrawMeshStrokeWithoutClear(x1, z1);
 
     let err2 = err * 2;
 
@@ -309,26 +391,35 @@ function DrawMeshRect(x1, z1, x2, z2) {
 
   console.log(`x1: ${x1}, z1: ${z1}, x2: ${x2}, z2: ${z2}`);
 
-  let sx = (x1 < x2) ? _meshObjectX : -_meshObjectX;
-  let sz = (z1 < z2) ? _meshObjectZ : -_meshObjectZ;
-  let dx = x2-x1>=0 ? x2-x1:x1-x2;
-  let dz = z2-z1>=0 ? z2-z1:z1-z2;
-  let cntX = dx/_meshObjectX;
-  let cntZ = dz/_meshObjectZ;
-  
-  for(let i=0;i<cntX;i++){
-    for(let j=0;j<cntZ;j++){
-      const rollOverGeo = new THREE.BoxGeometry(_meshObjectX, _meshObjectY, _meshObjectZ);
-      const rollOverMesh = new THREE.Mesh(rollOverGeo, rollOverMaterial);
-      rollOverMesh.position.copy(new THREE.Vector3(x1+i*sx, 0 , z1+j*sz));
-      scene.add(rollOverMesh);
-      MeshList.push(rollOverMesh);
+  let sx = (x1 < x2) ? _objectX : -_objectX;
+  let sz = (z1 < z2) ? _objectZ : -_objectZ;
+  let dx = x2 - x1 >= 0 ? x2 - x1 : x1 - x2;
+  let dz = z2 - z1 >= 0 ? z2 - z1 : z1 - z2;
+  let cntX = dx / _objectX;
+  let cntZ = dz / _objectZ;
+
+  for (let i = 0; i < cntX; i++) {
+    for (let j = 0; j < cntZ; j++) {
+      DrawMeshStrokeWithoutClear(x1 + i * sx, z1 + j * sz);
     }
   }
-  
+
 }
 
 function onPointerDown(event) {
+  if( tool === 'eraser'){
+    // remove voxel
+    for(let i=0;i<MeshList.length;i++){
+      for( let j=0;j<objects.length;j++){
+        if( objects[j].position.x === MeshList[i].position.x && objects[j].position.z === MeshList[i].position.z ){
+          scene.remove(objects[j]);
+          objects.splice(j, 1);
+          break;
+        }
+      }
+    }
+  }
+
   console.log("onPointerDown");
   isPressed = true;
 
@@ -347,54 +438,21 @@ function onPointerDown(event) {
     console.log("previousVoxel: ", previousVoxel);
   }
 
-
-  // if ( intersects.length > 0 ) {
-
-  //   const intersect = intersects[ 0 ];
-
-  // delete cube
-
-  //   if ( tool === 'eraser' ) {
-
-  //     if ( intersect.object !== plane ) {
-
-  //       scene.remove( intersect.object );
-
-  //       objects.splice( objects.indexOf( intersect.object ), 1 );
-
-  //     }
-
-  //     // create cube
-
-  //   } else {
-
-  //     console.log("create cube");
-  //     const voxel = new THREE.Mesh( cubeGeo, cubeMaterial );
-  //     voxel.position.copy( intersect.point ).add( intersect.face.normal );
-  //     voxel.position.divideScalar( 50 ).floor().multiplyScalar( 50 ).addScalar( 25 );
-  //     scene.add( voxel );
-
-  //     objects.push( voxel );
-
-  //   }
-
-  //   render();
-
-  // }
-
 }
+
+
 
 function onPointerUp() {
   isPressed = false;
 
-  if( tool === 'line' ) {
+  if (tool === 'line') {
     // add real line 
     previousVoxel = null;
 
     // clear previouse line ( MeshList )
     while (MeshList.length > 0) {
       const rollOverMesh = MeshList.pop();
-      
+
       const voxel = new THREE.Mesh(cubeGeo, cubeMaterial);
       voxel.position.copy(rollOverMesh.position);
       voxel.position.divideScalar(50).floor().multiplyScalar(50).addScalar(25);
@@ -404,14 +462,14 @@ function onPointerUp() {
       scene.remove(rollOverMesh);
     }
   }
-  else if( tool === 'rect' ) {
+  else if (tool === 'rect') {
     // add real line 
     previousVoxel = null;
 
     // clear previouse line ( MeshList )
     while (MeshList.length > 0) {
       const rollOverMesh = MeshList.pop();
-      
+
       const voxel = new THREE.Mesh(cubeGeo, cubeMaterial);
       voxel.position.copy(rollOverMesh.position);
       voxel.position.divideScalar(50).floor().multiplyScalar(50).addScalar(25);
@@ -419,158 +477,6 @@ function onPointerUp() {
       objects.push(voxel);
 
       scene.remove(rollOverMesh);
-    }
-  }
-}
-
-function draw() {
-
-  let zoomedWidth = gridSize * cellSize * zoomLevel + 100;
-  let zoomedHeight = gridSize * cellSize * zoomLevel;
-
-  scale(zoomLevel);
-  translate(panX, panY);
-
-  background(255);
-
-  if (mouseButton === LEFT) {
-    noFill();
-    stroke(0);
-    strokeWeight(1);
-    if (brushSize === 1) {
-      rect(mouseX / zoomLevel, mouseY / zoomLevel, cellSize, cellSize);
-    } else if (brushSize === 2) {
-      rect((mouseX - cellSize) / zoomLevel, (mouseY - cellSize) / zoomLevel, cellSize * 2, cellSize * 2);
-    } else if (brushSize === 3) {
-      rect((mouseX - cellSize) / zoomLevel, (mouseY - cellSize) / zoomLevel, cellSize * 3, cellSize * 3);
-    }
-  }
-
-  stroke(200);
-  for (let i = 0; i <= gridSize; i++) {
-    line(i * cellSize, 0, i * cellSize, height);
-    line(0, i * cellSize, width - 100, i * cellSize);
-  }
-
-  if (mouseIsPressed && mouseButton === LEFT) {
-    if (tool === 'brush') { } else if (tool === 'line' && startX != null && startY != null) {
-      noStroke();
-      fill(200);
-
-      let x1 = round(startX / cellSize / zoomLevel);
-      let z1 = round(startY / cellSize / zoomLevel);
-      let x2 = round(mouseX / cellSize / zoomLevel);
-      let z2 = round(mouseY / cellSize / zoomLevel);
-      let dx = abs(x2 - x1);
-      let dy = abs(z2 - z1);
-      let sx = x1 < x2 ? 1 : -1;
-      let sy = z1 < z2 ? 1 : -1;
-      let err = dx - dy;
-      let curX = x1;
-      let curY = z1;
-      while (true) {
-        for (let offsetX = 0; offsetX < brushSize; offsetX++) {
-          for (let offsetY = 0; offsetY < brushSize; offsetY++) {
-            rect((curX + 0.5 + offsetX) * cellSize * zoomLevel / zoomLevel, (curY + 0.5 + offsetY) * cellSize * zoomLevel / zoomLevel, cellSize * zoomLevel / zoomLevel, cellSize * zoomLevel / zoomLevel);
-
-          }
-        }
-        if (curX === x2 && curY === z2) {
-          break;
-        }
-        let e2 = 2 * err;
-        if (e2 > -dy) {
-          err -= dy;
-          curX += sx;
-        }
-        if (e2 < dx) {
-          err += dx;
-          curY += sy;
-        }
-      }
-    } else if (tool === 'rect' && startX != null && startY != null) {
-      // 瀏覽矩形
-      noStroke();
-      fill(200);
-      let x1 = round(startX / cellSize / zoomLevel);
-      let z1 = round(startY / cellSize / zoomLevel);
-      let x2 = round(mouseX / cellSize / zoomLevel);
-      let z2 = round(mouseY / cellSize / zoomLevel);
-      let xMin = min(x1, x2);
-      let yMin = min(z1, z2);
-      let xMax = max(x1, x2);
-      let yMax = max(z1, z2);
-      for (let i = xMin; i <= xMax; i++) {
-        for (let j = yMin; j <= yMax; j++) {
-          for (let offsetX = 0; offsetX < brushSize; offsetX++) {
-            for (let offsetY = 0; offsetY < brushSize; offsetY++) {
-              rect((i + 0.5 + offsetX) * cellSize, (j + 0.5 + offsetY) * cellSize, cellSize, cellSize);
-            }
-          }
-        }
-      }
-    }
-  }
-
-  // 像素
-  for (let i = 0; i < gridSize; i++) {
-    for (let j = 0; j < gridSize; j++) {
-      if (grid[i][j] === 1) {
-        noStroke();
-        fill(0);
-        rect(i * cellSize, j * cellSize, cellSize, cellSize);
-      }
-    }
-  }
-
-  if (mouseIsPressed) {
-    let i = floor(mouseX / (cellSize * zoomLevel));
-    let j = floor(mouseY / (cellSize * zoomLevel));
-
-    if (i >= 0 && i < gridSize && j >= 0 && j < gridSize) {
-      if (tool === 'brush' && mouseButton === LEFT) {
-        drawPixels(i, j);
-      } else if (tool === 'eraser' && mouseButton === LEFT) {
-        erasePixels(i, j);
-      }
-    }
-  }
-
-  function clearGrid() {
-    for (let i = 0; i < gridSize; i++) {
-      for (let j = 0; j < gridSize; j++) {
-        grid[i][j] = 0;
-      }
-    }
-  }
-  scale(1 / zoomLevel);
-}
-
-function drawPixels(i, j) {
-
-  let startI = i - floor(brushSize / 2);
-  let startJ = j - floor(brushSize / 2);
-  let endI = startI + brushSize;
-  let endJ = startJ + brushSize;
-  for (let x = startI; x < endI; x++) {
-    for (let y = startJ; y < endJ; y++) {
-      if (x >= 0 && x < gridSize && y >= 0 && y < gridSize) {
-        grid[x][y] = 1;
-      }
-    }
-  }
-}
-
-function erasePixels(i, j) {
-  let startI = i - floor(brushSize / 2);
-  let startJ = j - floor(brushSize / 2);
-  let endI = startI + brushSize;
-  let endJ = startJ + brushSize;
-  for (let x = startI; x < endI; x++) {
-    for (let y = startJ; y < endJ; y++) {
-      if (x >= 0 && x < gridSize && y >= 0 && y < gridSize) {
-        grid[x][y] = 0;
-      }
     }
   }
 }
@@ -589,107 +495,15 @@ function mouseWheel(event) {
   render();
 }
 
-function keyPressed() {
-  if (key === ' ') {
-    clearGrid();
-  }
-}
-
-function mousePressed() {
-  console.log("mousePressed");
-  if (mouseButton === RIGHT) {
-    dragging = true;
-  }
-  if (tool === 'line') {
-    startX = round(mouseX / cellSize / zoomLevel) * cellSize * zoomLevel + cellSize / 2;
-    startY = round(mouseY / cellSize / zoomLevel) * cellSize * zoomLevel + cellSize / 2;
-
-
-  } else if (tool === 'rect') {
-    startX = mouseX;
-    startY = mouseY;
-  }
-  if (mouseButton === RIGHT) {
-    isPanning = true;
-  }
-}
-
-function mouseReleased() {
-  console.log("mouseReleased");
-  isPanning = false;
-  let i = floor(mouseX / cellSize / zoomLevel);
-  let j = floor(mouseY / cellSize / zoomLevel);
-  if (tool === 'line') {
-    stroke(0);
-    strokeWeight(1);
-    let x1 = round((startX - cellSize / 2) / cellSize / zoomLevel);
-    let z1 = round((startY - cellSize / 2) / cellSize / zoomLevel);
-    let x2 = round((mouseX - cellSize / 2) / cellSize / zoomLevel);
-    let z2 = round((mouseY - cellSize / 2) / cellSize / zoomLevel);
-    drawThickLine(x1, z1, x2, z2, brushSize);
-    startX = null;
-    startY = null;
-
-  } else if (tool === 'rect') {
-    stroke(0);
-    strokeWeight(1);
-    let x1 = round(startX / cellSize / zoomLevel);
-    let z1 = round(startY / cellSize / zoomLevel);
-    let x2 = round(mouseX / cellSize / zoomLevel);
-    let z2 = round(mouseY / cellSize / zoomLevel);
-    startX = min(x1, x2) * cellSize * zoomLevel;
-    startY = min(z1, z2) * cellSize * zoomLevel;
-    let endX = max(x1, x2) * cellSize * zoomLevel;
-    let endY = max(z1, z2) * cellSize * zoomLevel;
-    for (let i = startX; i <= endX; i += cellSize * zoomLevel) {
-      for (let j = startY; j <= endY; j += cellSize * zoomLevel) {
-        drawPixels(round(i / cellSize / zoomLevel), round(j / cellSize / zoomLevel));
-      }
-    }
-    startX = null;
-    startY = null;
-  }
-}
-
-
-function drawThickLine(x1, z1, x2, z2, thickness) {
-  let dx = abs(x2 - x1);
-  let dy = abs(z2 - z1);
-  let sx = x1 < x2 ? 1 : -1;
-  let sy = z1 < z2 ? 1 : -1;
-  let err = dx - dy;
-  while (true) {
-
-    drawPixels(x1, z1);
-    if (x1 === x2 && z1 === z2) {
-      break;
-    }
-    let e2 = 2 * err;
-    if (e2 > -dy) {
-      err -= dy;
-      x1 += sx;
-    }
-    if (e2 < dx) {
-      err += dx;
-      z1 += sy;
+function clearAllRealObjects(){
+  while( objects.length > 1 ){
+    const obj = objects.pop();
+    if(obj!== plane){
+      scene.remove(obj);
     }
   }
 }
 
-function clearGrid() {
-  for (let i = 0; i < gridSize; i++) {
-    for (let j = 0; j < gridSize; j++) {
-      grid[i][j] = 0;
-    }
-  }
-}
-
-function mouseDragged() {
-  if (isPanning) {
-    panX += (mouseX - pmouseX) / zoomLevel;
-    panY += (mouseY - pmouseY) / zoomLevel;
-  }
-}
 
 function render() {
 
