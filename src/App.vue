@@ -1,6 +1,6 @@
 <template>
   <div>
-    <canvas id="three"></canvas>
+    <div id="three"></div>
   </div>
 </template>
 
@@ -56,7 +56,10 @@ let startX, startY;
 let dragging = false;
 
 
-let history = [];
+let history = []; // only save real position
+let historyIndex = -1;
+
+
 let isPressed = false;
 let previousVoxel = null;
 let brushSize = 1;
@@ -71,6 +74,7 @@ function createButton(text, position, callback) {
   button.style.position = 'absolute';
   button.style.left = position.x + 'px';
   button.style.top = position.y + 'px';
+  button.className = 'btn';
   button.addEventListener('click', callback);
   document.body.appendChild(button);
 }
@@ -102,11 +106,13 @@ function initSideBar() {
   createButton('Large Brush', { x: 54, y: window.innerHeight - 200 }, function () {
     brushSize = 3;
   });
-  createButton('redo', { x: 54, y: window.innerHeight - 150 }, function () {
-
+  createButton('redo', { x: 54, y: window.innerHeight - 150 }, function (event) {
+    event.preventDefault();
+    HistoryRedo();
   });
-  createButton('undo', { x: 54, y: window.innerHeight - 100 }, function () {
-
+  createButton('undo', { x: 54, y: window.innerHeight - 100 }, function (event) {
+    event.preventDefault();
+    HistoryUndo();
   });
   // ====== sidebar btns init END ======
 }
@@ -131,7 +137,7 @@ function initThreeJs() {
   const map = new THREE.TextureLoader().load('textures/square-outline-textured.png');
   map.colorSpace = THREE.SRGBColorSpace;
   cubeGeo = new THREE.BoxGeometry(_objectX, _objectY, _objectZ);
-  cubeMaterial = new THREE.MeshLambertMaterial({ color: 0xfeb74c , opacity: 0.1 , map: map });
+  cubeMaterial = new THREE.MeshLambertMaterial({ color: 0xfeb74c, opacity: 0.1, map: map });
 
   // grid
 
@@ -175,18 +181,13 @@ function init() {
   initSideBar();
 
   initThreeJs();
+  HistorySave();
 
   // ====== three.js event listeners START ======
 
   document.addEventListener('pointermove', onPointerMove);
   document.addEventListener('pointerdown', onPointerDown);
   document.addEventListener('pointerup', onPointerUp);
-  // document.addEventListener('keydown', onDocumentKeyDown);
-  // document.addEventListener('keyup', onDocumentKeyUp);
-
-  // //
-
-  // window.addEventListener( 'resize', onWindowResize );
 }
 
 // ====== three.js event listeners function ======
@@ -233,9 +234,9 @@ function onPointerMove(event) {
     if (isPressed) {
       if (tool === 'eraser') {
         // remove voxel
-        for(let i=0;i<MeshList.length;i++){
-          for( let j=0;j<objects.length;j++){
-            if( objects[j].position.x === MeshList[i].position.x && objects[j].position.z === MeshList[i].position.z ){
+        for (let i = 0; i < MeshList.length; i++) {
+          for (let j = 0; j < objects.length; j++) {
+            if (objects[j].position.x === MeshList[i].position.x && objects[j].position.z === MeshList[i].position.z) {
               scene.remove(objects[j]);
               objects.splice(j, 1);
               break;
@@ -296,7 +297,7 @@ function DrawMeshStroke(x, z) {
 function DrawMeshStrokeWithoutClear(x, z) {
   for (let i = 0; i < brushSize; i++) {
     for (let j = 0; j < brushSize; j++) {
-      DrawMeshPixel(x + i*_objectX, z+j*_objectZ);
+      DrawMeshPixel(x + i * _objectX, z + j * _objectZ);
     }
   }
 }
@@ -339,7 +340,7 @@ function DrawRealPixel(x, z) {
 
 
   const voxel = new THREE.Mesh(cubeGeo, cubeMaterial);
-  voxel.position.copy(new THREE.Vector3(x , 0, z));
+  voxel.position.copy(new THREE.Vector3(x, 0, z));
   scene.add(voxel);
   objects.push(voxel);
 }
@@ -407,11 +408,11 @@ function DrawMeshRect(x1, z1, x2, z2) {
 }
 
 function onPointerDown(event) {
-  if( tool === 'eraser'){
+  if (tool === 'eraser') {
     // remove voxel
-    for(let i=0;i<MeshList.length;i++){
-      for( let j=0;j<objects.length;j++){
-        if( objects[j].position.x === MeshList[i].position.x && objects[j].position.z === MeshList[i].position.z ){
+    for (let i = 0; i < MeshList.length; i++) {
+      for (let j = 0; j < objects.length; j++) {
+        if (objects[j].position.x === MeshList[i].position.x && objects[j].position.z === MeshList[i].position.z) {
           scene.remove(objects[j]);
           objects.splice(j, 1);
           break;
@@ -479,6 +480,16 @@ function onPointerUp() {
       scene.remove(rollOverMesh);
     }
   }
+
+
+  // save history
+
+  // if document is focus on redo undo button , do not save history
+  if (document.activeElement.className === 'btn' ) {
+    return;
+  }
+  
+  HistorySave();
 }
 
 function mouseWheel(event) {
@@ -495,13 +506,16 @@ function mouseWheel(event) {
   render();
 }
 
-function clearAllRealObjects(){
-  while( objects.length > 1 ){
+function clearAllRealObjects() {
+  console.log("clearAllRealObjects" , objects);
+  while (objects.length > 1) {
     const obj = objects.pop();
-    if(obj!== plane){
+    if (obj != plane) {
       scene.remove(obj);
     }
   }
+
+  render();
 }
 
 
@@ -510,4 +524,61 @@ function render() {
   renderer.render(scene, camera);
 
 }
+
+function HistorySave() {
+  if(historyIndex != history.length - 1){
+    history.splice(historyIndex + 1, history.length - historyIndex - 1);
+  }
+
+  historyIndex++;
+  const historyPositions = [];
+  for (let i = 0; i < objects.length; i++) {
+    if (objects[i] !== plane) {
+      historyPositions.push({x: objects[i].position.x, z: objects[i].position.z});
+    }
+  }
+  history.push(historyPositions);
+
+  console.log("save history: ", history);
+}
+
+function HistoryRedo() {
+  if (historyIndex == -1 || historyIndex == history.length - 1) {
+    console.log("Unable to redo , idx:", historyIndex);
+    return;
+  }
+
+  historyIndex++;
+  const historyPositions = history[historyIndex];
+  console.log("redo: ", historyPositions);
+
+  clearAllRealObjects();
+
+  for (let i = 0; i < historyPositions.length; i++) {
+    DrawRealPixel(historyPositions[i].x, historyPositions[i].z);
+  }
+
+  render();
+}
+
+
+function HistoryUndo() {
+  if (historyIndex == -1 || historyIndex == 0) {
+    console.log("Unable to undo , idx:", historyIndex);
+    return;
+  }
+
+  historyIndex = historyIndex - 1;
+  const historyPositions = history[historyIndex];
+  console.log("undo: " ,  historyIndex , historyPositions);
+
+  clearAllRealObjects();
+
+  for (let i = 0; i < historyPositions.length; i++) {
+    DrawRealPixel(historyPositions[i].x, historyPositions[i].z);
+  }
+
+  render();
+}
+
 </script>
