@@ -1,7 +1,4 @@
 <template>
-  <div>
-    <div id="three"></div>
-  </div>
 </template>
 
 <style scoped>
@@ -37,6 +34,8 @@ let cubeMaterial;
 
 
 let objectWidth = 50;
+let gridSize = 1000;
+let gridCount = 20;
 
 let MeshList = [];
 let objects = [];
@@ -46,12 +45,7 @@ let objects = [];
 
 
 let zoomLevel = 1;
-let panX = 0;
-let panY = 0;
-let isPanning = false;
 
-let startX, startY;
-let dragging = false;
 
 
 let history = []; // only save real position
@@ -80,22 +74,22 @@ function createButton(text, position, callback) {
 function initSideBar() {
   // ====== sidebar btns init START ======
 
-  createButton('填滿', { x: 54, y: window.innerHeight - 600 }, function () {
+  createButton('fill', { x: 54, y: window.innerHeight - 600 }, function () {
     tool = 'fill';
   });
-  createButton('橡皮擦', { x: 54, y: window.innerHeight - 500 }, function () {
+  createButton('eraser', { x: 54, y: window.innerHeight - 500 }, function () {
     tool = 'eraser';
   });
-  createButton('筆刷', { x: 54, y: window.innerHeight - 550 }, function () {
+  createButton('brush', { x: 54, y: window.innerHeight - 550 }, function () {
     tool = 'brush';
   });
-  createButton('線條', { x: 54, y: window.innerHeight - 450 }, function () {
+  createButton('line', { x: 54, y: window.innerHeight - 450 }, function () {
     tool = 'line';
   });
-  createButton('矩形', { x: 54, y: window.innerHeight - 400 }, function () {
+  createButton('rect', { x: 54, y: window.innerHeight - 400 }, function () {
     tool = 'rect';
   });
-  createButton('清空', { x: 54, y: window.innerHeight - 350 }, function () {
+  createButton('clear', { x: 54, y: window.innerHeight - 350 }, function () {
     clearAllRealObjects();
   });
   createButton('Small Brush', { x: 54, y: window.innerHeight - 300 }, function () {
@@ -142,7 +136,7 @@ function initThreeJs() {
 
   // grid
 
-  const gridHelper = new THREE.GridHelper(1000, 20);
+  const gridHelper = new THREE.GridHelper(gridSize, gridCount);
   // 1000 is the size, 20 is how many grids
   scene.add(gridHelper);
 
@@ -397,8 +391,42 @@ function DrawMeshLine(x1, z1, x2, z2) {
 }
 
 function FillRealObjects(){
-  let curVec = getCurrentPointerCoordinate();
-  console.log("curVec: ", curVec);
+  const curVec = getCurrentPointerCoordinate();
+  const PositionBound = gridSize/2 - objectWidth/2;
+
+  let isVisited = {};
+  for(let i=0;i<objects.length;i++){
+    if(objects[i] !== plane){
+      isVisited[`${objects[i].position.x},${objects[i].position.z}`] = true;
+    }
+  }
+
+  // bfs
+  let queue = [];
+  queue.push([curVec.x, curVec.z]);
+
+  while(queue.length > 0){
+    let [x, z] = queue.shift();
+    // out of bound
+    if( !(x >= -PositionBound && x <= PositionBound && z >= -PositionBound && z <= PositionBound) ){
+      continue;
+    }
+    // already visited
+    if(isVisited[`${x},${z}`]){
+      continue;
+    }
+    isVisited[`${x},${z}`] = true;
+
+    // Draw valid pixel 
+    DrawRealPixel(x, z);
+
+    // push 4 direction
+    queue.push([x + objectWidth, z]);
+    queue.push([x - objectWidth, z]);
+    queue.push([x, z + objectWidth]);
+    queue.push([x, z - objectWidth]);
+  }
+  
 }
 
 
@@ -427,6 +455,9 @@ function onPointerDown(event) {
   if (tool === 'eraser') {
     ClearObjectsByMeshList();
   }
+  if (tool === 'fill'){
+    FillRealObjects();
+  }
 
   console.log("onPointerDown");
   isPressed = true;
@@ -443,7 +474,7 @@ function onPointerDown(event) {
     previousVoxel.position.copy(intersect.point).add(intersect.face.normal);
     previousVoxel.position.divideScalar(50).floor().multiplyScalar(50).addScalar(25);
 
-    console.log("previousVoxel: ", previousVoxel);
+    console.log("previousVoxel: ", previousVoxel);p
   }
 
 }
@@ -462,9 +493,6 @@ function onPointerUp() {
     // add real line 
     previousVoxel = null;
     DrawObjectsByMeshList();
-  }
-  else if (tool === 'fill') {
-    FillRealObjects();
   }
 
   // save history
