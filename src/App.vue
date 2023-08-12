@@ -251,7 +251,6 @@ function onPointerMove(event) {
 
         DrawMeshLine(x1, z1, x2, z2);
 
-        console.log("MeshList: ", MeshList);
 
       } else if (tool === 'rect') {
         let x1 = previousVoxel.position.x;
@@ -261,8 +260,6 @@ function onPointerMove(event) {
         let z2 = curVec.z;
 
         DrawMeshRect(x1, z1, x2, z2);
-
-        console.log("MeshList: ", MeshList);
       }
     }
   }
@@ -361,8 +358,6 @@ function DrawRealPixel(x, z) {
 function DrawMeshLine(x1, z1, x2, z2) {
 
   clearMeshList();
-  console.log(`x1: ${x1}, z1: ${z1}, x2: ${x2}, z2: ${z2}`);
-
   // Bresenham's line algorithm
 
   let dx = x2 - x1 >= 0 ? x2 - x1 : x1 - x2;
@@ -372,7 +367,6 @@ function DrawMeshLine(x1, z1, x2, z2) {
   let err = dx - dy;
 
   while (x1 != x2 || z1 != z2) {
-    console.log(`x1: ${x1}, z1: ${z1}`);
 
     DrawMeshStrokeWithoutClear(x1, z1);
 
@@ -434,7 +428,6 @@ function DrawMeshRect(x1, z1, x2, z2) {
 
   clearMeshList();
 
-  console.log(`x1: ${x1}, z1: ${z1}, x2: ${x2}, z2: ${z2}`);
 
   let sx = (x1 < x2) ? objectWidth : -objectWidth;
   let sz = (z1 < z2) ? objectWidth : -objectWidth;
@@ -453,13 +446,12 @@ function DrawMeshRect(x1, z1, x2, z2) {
 
 function onPointerDown(event) {
   if (tool === 'eraser') {
-    ClearObjectsByMeshList();
+    this.ClearObjectsByMeshList();
   }
   if (tool === 'fill'){
-    FillRealObjects();
+    this.FillRealObjects();
   }
 
-  console.log("onPointerDown");
   isPressed = true;
 
   pointer.set((event.clientX / window.innerWidth) * 2 - 1, - (event.clientY / window.innerHeight) * 2 + 1);
@@ -472,9 +464,11 @@ function onPointerDown(event) {
     const intersect = intersects[0];
     previousVoxel = new THREE.Mesh(cubeGeo, cubeMaterial);
     previousVoxel.position.copy(intersect.point).add(intersect.face.normal);
-    previousVoxel.position.divideScalar(50).floor().multiplyScalar(50).addScalar(25);
+    previousVoxel.position.divideScalar(objectWidth).floor().multiplyScalar(objectWidth).addScalar(objectWidth/2);
 
-    console.log("previousVoxel: ", previousVoxel);p
+    if (tool == "pen"){
+      DrawRealStroke(previousVoxel.position.x, previousVoxel.position.z);
+    }
   }
 
 }
@@ -506,7 +500,6 @@ function onPointerUp() {
 }
 
 function mouseWheel(event) {
-  console.log("mouseWheel");
 
   if (event.deltaY > 0) {
     zoomLevel = max(zoomLevel - 0.1, 0.1);
@@ -520,7 +513,6 @@ function mouseWheel(event) {
 }
 
 function clearAllRealObjects() {
-  console.log("clearAllRealObjects" , objects);
   while (objects.length > 1) {
     const obj = objects.pop();
     if (obj != plane) {
@@ -552,18 +544,15 @@ function HistorySave() {
   }
   history.push(historyPositions);
 
-  console.log("save history: ", history);
 }
 
 function HistoryRedo() {
   if (historyIndex == -1 || historyIndex == history.length - 1) {
-    console.log("Unable to redo , idx:", historyIndex);
     return;
   }
 
   historyIndex++;
   const historyPositions = history[historyIndex];
-  console.log("redo: ", historyPositions);
 
   clearAllRealObjects();
 
@@ -577,13 +566,11 @@ function HistoryRedo() {
 
 function HistoryUndo() {
   if (historyIndex == -1 || historyIndex == 0) {
-    console.log("Unable to undo , idx:", historyIndex);
     return;
   }
 
   historyIndex = historyIndex - 1;
   const historyPositions = history[historyIndex];
-  console.log("undo: " ,  historyIndex , historyPositions);
 
   clearAllRealObjects();
 
