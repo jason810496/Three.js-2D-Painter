@@ -11,3 +11,7 @@ A 2D painter demo using `Three.js` with the following features :
 
 ## reference 
 [Three.js Example : webgl interactive voxelpainter](https://threejs.org/examples/#webgl_interactive_voxelpainter)
+
+## TODO
+- [] Refactor the code
+- [ ] Wrap the code into npm package
